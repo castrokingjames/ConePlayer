@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">ConePlayer</string>
+    <string name="time">Time: %s : %s</string>
+    <string name="state">State: %s</string>
+</resources>
