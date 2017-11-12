@@ -41,6 +41,12 @@ public interface ConePlayer {
 
     void clearPlayerStateChangeListeners();
 
+    void addCompletionListener(CompletionListener listener);
+
+    void removeCompletionListener(CompletionListener listener);
+
+    void clearCompletionListener();
+
     void setVideoSurfaceView(SurfaceView surfaceView);
 
     void setVideoTextureView(TextureView textureView);
