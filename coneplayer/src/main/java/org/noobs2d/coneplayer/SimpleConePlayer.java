@@ -1,11 +1,13 @@
 package org.noobs2d.coneplayer;
 
+import android.graphics.Rect;
 import android.graphics.SurfaceTexture;
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Message;
 import android.os.Process;
-import android.util.Log;
+import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.TextureView;
@@ -30,6 +32,7 @@ public class SimpleConePlayer
     private static final int MSG_REPEAT = 4;
     private static final int MSG_STOP = 5;
     private static final int MSG_RELEASE = 6;
+    private static final int MSG_ATTACH_VIEW = 7;
 
     private final CopyOnWriteArraySet<VideoListener> videoListeners;
     private final CopyOnWriteArraySet<PlayerStateChangeListener> playerStateChangeListeners;
@@ -93,6 +96,11 @@ public class SimpleConePlayer
                 }
                 case MSG_RELEASE: {
                     releaseInternal();
+                    return true;
+                }
+                case MSG_ATTACH_VIEW: {
+                    Bundle bundle = (Bundle) msg.obj;
+                    attachViewInternal(bundle);
                     return true;
                 }
                 default:
@@ -169,13 +177,35 @@ public class SimpleConePlayer
     }
 
     @Override
+    public void addCompletionListener(CompletionListener listener) {
+        completionListeners.add(listener);
+    }
+
+    @Override
+    public void removeCompletionListener(CompletionListener listener) {
+        completionListeners.remove(listener);
+    }
+
+    @Override
+    public void clearCompletionListener() {
+        completionListeners.clear();
+    }
+
+    @Override
     public void setVideoSurfaceView(SurfaceView surfaceView) {
         if (surfaceView == videoView)
             return;
         removeVideoViewListener();
         videoView = surfaceView;
         if (surfaceView != null) {
-            surfaceView.getHolder().addCallback(componentListener);
+
+            SurfaceHolder surfaceHolder = surfaceView.getHolder();
+            Surface surface = surfaceHolder.getSurface();
+            if (surface != null && surface.isValid()) {
+                setSurfaceInternal(surface, surfaceView.getWidth(), surfaceView.getHeight());
+            }
+
+            surfaceHolder.addCallback(componentListener);
         }
     }
 
@@ -185,8 +215,15 @@ public class SimpleConePlayer
             return;
         removeVideoViewListener();
         videoView = textureView;
-        if (textureView != null)
+        if (textureView != null) {
+            SurfaceTexture surfaceTexture = textureView.getSurfaceTexture();
+            if (surfaceTexture != null) {
+                Surface surface = new Surface(surfaceTexture);
+                setSurfaceInternal(surface, textureView.getWidth(), textureView.getHeight());
+            }
+
             textureView.setSurfaceTextureListener(componentListener);
+        }
     }
 
     private void removeVideoViewListener() {
@@ -346,6 +383,23 @@ public class SimpleConePlayer
         libVLC.release();
     }
 
+    private void attachViewInternal(Bundle bundle) {
+        int width = bundle.getInt("width");
+        int height = bundle.getInt("height");
+        Surface surface = bundle.getParcelable("surface");
+        vlcVout.setWindowSize(width, height);
+        vlcVout.setVideoSurface(surface, null);
+        vlcVout.attachViews();
+    }
+
+    private void setSurfaceInternal(Surface surface, int width, int height) {
+        Bundle bundle = new Bundle();
+        bundle.putParcelable("surface", surface);
+        bundle.putInt("width", width);
+        bundle.putInt("height", height);
+        handler.obtainMessage(MSG_ATTACH_VIEW, bundle).sendToTarget();
+    }
+
     private void stopInternal() {
         mediaPlayer.stop();
     }
@@ -356,9 +410,7 @@ public class SimpleConePlayer
 
         @Override
         public void onSurfaceTextureAvailable(SurfaceTexture surface, int width, int height) {
-            vlcVout.setWindowSize(width, height);
-            vlcVout.setVideoSurface(surface);
-            vlcVout.attachViews();
+            setSurfaceInternal(new Surface(surface), width, height);
         }
 
         @Override
@@ -378,11 +430,8 @@ public class SimpleConePlayer
 
         @Override
         public void surfaceCreated(SurfaceHolder holder) {
-            int width = holder.getSurfaceFrame().width();
-            int height = holder.getSurfaceFrame().height();
-            vlcVout.setWindowSize(width, height);
-            vlcVout.setVideoSurface(holder.getSurface(), holder);
-            vlcVout.attachViews();
+            Rect rect = holder.getSurfaceFrame();
+            setSurfaceInternal(holder.getSurface(), rect.width(), rect.height());
         }
 
         @Override
